@@ -1,0 +1,6 @@
+@NVR1Service_HostAddress = http://localhost:5283
+
+GET {{NVR1Service_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

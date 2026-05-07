@@ -62,7 +62,7 @@
   vars:
     deploy_root: /opt/nvr1service-swarm
     source_root: "{{ deploy_root }}/NVR1Service"
-    source_dir: "{{ playbook_dir }}/../Demo/NVR1Service"
+    source_dir: "{{ playbook_dir }}/NVR1Service"
     app_image: nvr1service:demo
   tasks:
     - name: Create deployment root
