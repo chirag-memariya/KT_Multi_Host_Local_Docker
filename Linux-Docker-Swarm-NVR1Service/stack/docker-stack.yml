@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   nvr1service:
-    image: nvr1service:local
+    image: ${APP_IMAGE:-nvr1service:demo}
     environment:
       ASPNETCORE_URLS: http://0.0.0.0:8080
       RABBITMQ_HOST: ${RABBITMQ_HOST:-rabbitmq.local}
@@ -15,13 +15,13 @@ services:
     networks:
       - nvr1-overlay
     deploy:
-      replicas: 1
+      replicas: ${STACK_REPLICAS:-3}
+      placement:
+        max_replicas_per_node: 1
       restart_policy:
         condition: on-failure
-      placement:
-        constraints:
-          - node.role == manager
 
 networks:
   nvr1-overlay:
-    external: true
+    driver: overlay
+    attachable: true

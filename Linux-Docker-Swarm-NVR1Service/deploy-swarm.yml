@@ -1,17 +1,25 @@
 ---
-- name: Initialize Docker Swarm on the first manager
+- name: Initialize Docker Swarm on the demo manager
   hosts: swarm_managers[0]
   become: true
   vars:
-    swarm_advertise_addr: 192.168.27.142
+    swarm_manager_addr: "{{ hostvars[inventory_hostname].swarm_node_ip }}"
   tasks:
+    - name: Wait for Docker daemon to become ready
+      ansible.builtin.command: docker info
+      register: docker_info
+      retries: 15
+      delay: 4
+      until: docker_info.rc == 0
+      changed_when: false
+
     - name: Check current swarm state
       ansible.builtin.command: docker info --format {{ '{{' }}.Swarm.LocalNodeState{{ '}}' }}
       register: swarm_state
       changed_when: false
 
     - name: Initialize swarm when inactive
-      ansible.builtin.command: docker swarm init --advertise-addr {{ swarm_advertise_addr }}
+      ansible.builtin.command: docker swarm init --advertise-addr {{ swarm_manager_addr }}
       when: swarm_state.stdout != 'active'
 
     - name: Get worker join token
@@ -21,18 +29,41 @@
 
     - name: Store worker join token for later plays
       ansible.builtin.set_fact:
-        worker_token: "{{ worker_join_token.stdout }}"
+        swarm_worker_token: "{{ worker_join_token.stdout }}"
 
-- name: Build image and deploy NVR1Service stack
-  hosts: swarm_managers[0]
+- name: Join demo workers to the swarm
+  hosts: swarm_workers
+  become: true
+  vars:
+    swarm_manager_host: "{{ groups['swarm_managers'][0] }}"
+    swarm_manager_addr: "{{ hostvars[swarm_manager_host].swarm_node_ip }}"
+    swarm_worker_token: "{{ hostvars[swarm_manager_host].swarm_worker_token }}"
+  tasks:
+    - name: Wait for Docker daemon to become ready
+      ansible.builtin.command: docker info
+      register: docker_info
+      retries: 15
+      delay: 4
+      until: docker_info.rc == 0
+      changed_when: false
+
+    - name: Check current swarm state
+      ansible.builtin.command: docker info --format {{ '{{' }}.Swarm.LocalNodeState{{ '}}' }}
+      register: swarm_state
+      changed_when: false
+
+    - name: Join worker to swarm when inactive
+      ansible.builtin.command: docker swarm join --token {{ swarm_worker_token }} {{ swarm_manager_addr }}:2377
+      when: swarm_state.stdout != 'active'
+
+- name: Build NVR1Service image on each swarm node
+  hosts: swarm_nodes
   become: true
   vars:
     deploy_root: /opt/nvr1service-swarm
-    source_root: /opt/nvr1service-swarm/NVR1Service
-    stack_name: nvr1
-    rabbitmq_host: rabbitmq.local
-    rabbitmq_port: 5672
+    source_root: "{{ deploy_root }}/NVR1Service"
     source_dir: "{{ playbook_dir }}/../Demo/NVR1Service"
+    app_image: nvr1service:demo
   tasks:
     - name: Create deployment root
       ansible.builtin.file:
@@ -40,20 +71,27 @@
         state: directory
         mode: '0755'
 
-    - name: Copy NVR1Service source to swarm manager
+    - name: Copy NVR1Service source to swarm nodes
       ansible.builtin.copy:
         src: "{{ source_dir }}/"
         dest: "{{ source_root }}/"
         mode: preserve
 
-    - name: Build NVR1Service Docker image on manager
+    - name: Build NVR1Service Docker image on each node
       ansible.builtin.command:
-        cmd: docker build -t nvr1service:local -f {{ source_root }}/Dockerfile {{ deploy_root }}
+        cmd: docker build -t {{ app_image }} -f {{ source_root }}/Dockerfile {{ source_root }}
 
-    - name: Create overlay network if missing
-      ansible.builtin.shell: docker network inspect nvr1-overlay >/dev/null 2>&1 || docker network create --driver overlay --attachable nvr1-overlay
-      changed_when: false
-
+- name: Deploy NVR1Service stack from the manager
+  hosts: swarm_managers[0]
+  become: true
+  vars:
+    deploy_root: /opt/nvr1service-swarm
+    stack_name: nvr1
+    rabbitmq_host: rabbitmq.local
+    rabbitmq_port: 5672
+    app_image: nvr1service:demo
+    stack_replicas: "{{ groups['swarm_nodes'] | length }}"
+  tasks:
     - name: Copy stack file to manager
       ansible.builtin.copy:
         src: stack/docker-stack.yml
@@ -64,5 +102,7 @@
       ansible.builtin.command:
         cmd: docker stack deploy -c {{ deploy_root }}/docker-stack.yml {{ stack_name }}
       environment:
+        APP_IMAGE: "{{ app_image }}"
         RABBITMQ_HOST: "{{ rabbitmq_host }}"
         RABBITMQ_PORT: "{{ rabbitmq_port | string }}"
+        STACK_REPLICAS: "{{ stack_replicas | string }}"

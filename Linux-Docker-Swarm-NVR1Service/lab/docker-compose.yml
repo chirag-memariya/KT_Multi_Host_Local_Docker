@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  swarm-manager:
+    build:
+      context: ./node
+    container_name: swarm-manager
+    hostname: swarm-manager
+    privileged: true
+    ports:
+      - "2221:22"
+    networks:
+      swarm-lab:
+        ipv4_address: 10.10.0.11
+    volumes:
+      - swarm-manager-data:/var/lib/docker
+
+  swarm-worker-1:
+    build:
+      context: ./node
+    container_name: swarm-worker-1
+    hostname: swarm-worker-1
+    privileged: true
+    ports:
+      - "2222:22"
+    networks:
+      swarm-lab:
+        ipv4_address: 10.10.0.21
+    volumes:
+      - swarm-worker-1-data:/var/lib/docker
+
+  swarm-worker-2:
+    build:
+      context: ./node
+    container_name: swarm-worker-2
+    hostname: swarm-worker-2
+    privileged: true
+    ports:
+      - "2223:22"
+    networks:
+      swarm-lab:
+        ipv4_address: 10.10.0.22
+    volumes:
+      - swarm-worker-2-data:/var/lib/docker
+
+networks:
+  swarm-lab:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.10.0.0/24
+
+volumes:
+  swarm-manager-data:
+  swarm-worker-1-data:
+  swarm-worker-2-data:
