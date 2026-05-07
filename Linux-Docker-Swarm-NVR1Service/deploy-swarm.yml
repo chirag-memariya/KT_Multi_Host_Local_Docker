@@ -1,0 +1,68 @@
+---
+- name: Initialize Docker Swarm on the first manager
+  hosts: swarm_managers[0]
+  become: true
+  vars:
+    swarm_advertise_addr: 192.168.27.142
+  tasks:
+    - name: Check current swarm state
+      ansible.builtin.command: docker info --format {{ '{{' }}.Swarm.LocalNodeState{{ '}}' }}
+      register: swarm_state
+      changed_when: false
+
+    - name: Initialize swarm when inactive
+      ansible.builtin.command: docker swarm init --advertise-addr {{ swarm_advertise_addr }}
+      when: swarm_state.stdout != 'active'
+
+    - name: Get worker join token
+      ansible.builtin.command: docker swarm join-token -q worker
+      register: worker_join_token
+      changed_when: false
+
+    - name: Store worker join token for later plays
+      ansible.builtin.set_fact:
+        worker_token: "{{ worker_join_token.stdout }}"
+
+- name: Build image and deploy NVR1Service stack
+  hosts: swarm_managers[0]
+  become: true
+  vars:
+    deploy_root: /opt/nvr1service-swarm
+    source_root: /opt/nvr1service-swarm/NVR1Service
+    stack_name: nvr1
+    rabbitmq_host: rabbitmq.local
+    rabbitmq_port: 5672
+    source_dir: "{{ playbook_dir }}/../Demo/NVR1Service"
+  tasks:
+    - name: Create deployment root
+      ansible.builtin.file:
+        path: "{{ deploy_root }}"
+        state: directory
+        mode: '0755'
+
+    - name: Copy NVR1Service source to swarm manager
+      ansible.builtin.copy:
+        src: "{{ source_dir }}/"
+        dest: "{{ source_root }}/"
+        mode: preserve
+
+    - name: Build NVR1Service Docker image on manager
+      ansible.builtin.command:
+        cmd: docker build -t nvr1service:local -f {{ source_root }}/Dockerfile {{ deploy_root }}
+
+    - name: Create overlay network if missing
+      ansible.builtin.shell: docker network inspect nvr1-overlay >/dev/null 2>&1 || docker network create --driver overlay --attachable nvr1-overlay
+      changed_when: false
+
+    - name: Copy stack file to manager
+      ansible.builtin.copy:
+        src: stack/docker-stack.yml
+        dest: "{{ deploy_root }}/docker-stack.yml"
+        mode: '0644'
+
+    - name: Deploy NVR1Service stack
+      ansible.builtin.command:
+        cmd: docker stack deploy -c {{ deploy_root }}/docker-stack.yml {{ stack_name }}
+      environment:
+        RABBITMQ_HOST: "{{ rabbitmq_host }}"
+        RABBITMQ_PORT: "{{ rabbitmq_port | string }}"

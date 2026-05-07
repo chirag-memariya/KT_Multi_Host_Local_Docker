@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  nvr1service:
+    image: nvr1service:local
+    environment:
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      RABBITMQ_HOST: ${RABBITMQ_HOST:-rabbitmq.local}
+      RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+    ports:
+      - target: 8080
+        published: 8080
+        protocol: tcp
+        mode: ingress
+    networks:
+      - nvr1-overlay
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - node.role == manager
+
+networks:
+  nvr1-overlay:
+    external: true

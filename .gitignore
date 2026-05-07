@@ -1,0 +1,98 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# .NET
+bin/
+obj/
+.vs/
+.vscode/
+*.csproj.user
+*.sln.DotSettings.user
+*.user
+.nuget/
+packages/
+.NETFramework,Version=*/
+*.nupkg
+*.snupkg
+project.lock.json
+project.fragment.lock.json
+appsettings.local.json
+appsettings.*.local.json
+*.DotSettings
+*.DotSettings.user
+
+# Ansible
+.ansible/
+.ansible/tmp/
+*.retry
+*.vault
+!.vault.txt
+
+# IDE/Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.sublime-project
+.sublime-workspace
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+.env.vault
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# OS specific
+.DS_Store
+.AppleDouble
+.LSOverride
+*.lnk
+
+# Local overrides
+inventory.local.ini
+*.local.yml
+local.conf
+
+# Sensitive/Secret files
+*.key
+*.pem
+*.crt
+secrets/
+.ssh/

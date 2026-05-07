@@ -1,0 +1,16 @@
+[Unit]
+Description=NVR1Service
+After=network.target
+
+[Service]
+WorkingDirectory={{ app_publish_dir }}
+ExecStart=/usr/bin/dotnet {{ app_publish_dir }}/NVR1Service.dll
+Restart=always
+RestartSec=5
+User={{ service_user }}
+Environment=ASPNETCORE_URLS=http://0.0.0.0:8080
+Environment=RABBITMQ_HOST={{ rabbitmq_host }}
+Environment=RABBITMQ_PORT={{ rabbitmq_port }}
+
+[Install]
+WantedBy=multi-user.target
