@@ -1,27 +1,15 @@
 version: '3.8'
 
 services:
-  nvr1service:
-    image: ${APP_IMAGE:-nvr1service:demo}
-    environment:
-      ASPNETCORE_URLS: http://0.0.0.0:8080
-      RABBITMQ_HOST: ${RABBITMQ_HOST:-rabbitmq.local}
-      RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
-    ports:
-      - target: 8080
-        published: 8080
-        protocol: tcp
-        mode: ingress
-    networks:
-      - nvr1-overlay
+  hello-service:
+    image: ${APP_IMAGE:-alpine:3.20}
+    command:
+      - /bin/sh
+      - -c
+      - while true; do echo "hello from swarm $$(hostname)"; sleep 10; done
     deploy:
       replicas: ${STACK_REPLICAS:-3}
       placement:
         max_replicas_per_node: 1
       restart_policy:
         condition: on-failure
-
-networks:
-  nvr1-overlay:
-    driver: overlay
-    attachable: true

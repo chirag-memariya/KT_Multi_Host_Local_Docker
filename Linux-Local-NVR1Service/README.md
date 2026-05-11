@@ -1,13 +1,13 @@
 # Linux Local Multi-Host Deployment for NVR1Service
 
-This folder contains a simple Linux-only local deployment for the existing `Demo/NVR1Service` application.
+This folder contains a simple Linux-only local deployment for the existing `NVR1Service` application.
 
 This version is currently configured with a single Linux node.
 
 What this deployment does:
 
 - installs .NET 8 SDK on each target Linux host
-- copies the existing `Demo/NVR1Service` source to each host
+- copies the existing `NVR1Service` source to each host
 - publishes the service on each host
 - runs the service with `systemd`
 
@@ -34,4 +34,4 @@ Before running:
 
 - update hostnames, SSH user, and private key path in `inventory.ini`
 - update `rabbitmq_host` inside `deploy-local.yml` if needed
-- ensure the control machine runs the playbook from inside this folder so `../Demo/NVR1Service` resolves correctly
+- ensure the control machine runs the playbook from inside this folder so `../NVR1Service` resolves correctly

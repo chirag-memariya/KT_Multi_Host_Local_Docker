@@ -56,53 +56,92 @@
       ansible.builtin.command: docker swarm join --token {{ swarm_worker_token }} {{ swarm_manager_addr }}:2377
       when: swarm_state.stdout != 'active'
 
-- name: Build NVR1Service image on each swarm node
+- name: Prepare lightweight demo image on each swarm node
   hosts: swarm_nodes
+  serial: 1
   become: true
   vars:
-    deploy_root: /opt/nvr1service-swarm
-    source_root: "{{ deploy_root }}/NVR1Service"
-    source_dir: "{{ playbook_dir }}/NVR1Service"
-    app_image: nvr1service:demo
+    app_image: alpine:3.20
+    swarm_custom_ca_cert_src: ""
+    swarm_custom_ca_cert_dest: /usr/local/share/ca-certificates/swarm-custom-ca.crt
   tasks:
-    - name: Create deployment root
+    - name: Ensure CA trust package is installed
+      ansible.builtin.apt:
+        name: ca-certificates
+        state: present
+        update_cache: true
+
+    - name: Check whether optional custom CA cert exists on control node
+      ansible.builtin.stat:
+        path: "{{ swarm_custom_ca_cert_src }}"
+      register: swarm_custom_ca_cert_stat
+      delegate_to: localhost
+      become: false
+      when: swarm_custom_ca_cert_src | length > 0
+
+    - name: Copy optional custom CA cert to swarm node trust store
+      ansible.builtin.copy:
+        src: "{{ swarm_custom_ca_cert_src }}"
+        dest: "{{ swarm_custom_ca_cert_dest }}"
+        mode: '0644'
+      register: swarm_custom_ca_copy
+      when:
+        - swarm_custom_ca_cert_src | length > 0
+        - swarm_custom_ca_cert_stat.stat.exists
+
+    - name: Update system CA trust
+      ansible.builtin.command: update-ca-certificates
+      changed_when: false
+
+    - name: Restart Docker daemon when custom CA changes
+      ansible.builtin.service:
+        name: docker
+        state: restarted
+      when:
+        - swarm_custom_ca_cert_src | length > 0
+        - swarm_custom_ca_cert_stat.stat.exists
+        - swarm_custom_ca_copy.changed
+
+    - name: Wait for Docker daemon after optional restart
+      ansible.builtin.command: docker info
+      register: docker_info_after_ca
+      retries: 15
+      delay: 4
+      until: docker_info_after_ca.rc == 0
+      changed_when: false
+
+    - name: Pull lightweight demo image with retries
+      ansible.builtin.command:
+        cmd: docker pull {{ app_image }}
+      register: docker_pull_app_image
+      retries: 6
+      delay: 20
+      until: docker_pull_app_image.rc == 0
+
+- name: Deploy hello-service stack from the manager
+  hosts: swarm_managers[0]
+  become: true
+  vars:
+    deploy_root: /opt/hello-swarm
+    stack_name: nvr1
+    app_image: alpine:3.20
+    stack_replicas: "{{ groups['swarm_nodes'] | length }}"
+  tasks:
+    - name: Create deployment root on manager
       ansible.builtin.file:
         path: "{{ deploy_root }}"
         state: directory
         mode: '0755'
 
-    - name: Copy NVR1Service source to swarm nodes
-      ansible.builtin.copy:
-        src: "{{ source_dir }}/"
-        dest: "{{ source_root }}/"
-        mode: preserve
-
-    - name: Build NVR1Service Docker image on each node
-      ansible.builtin.command:
-        cmd: docker build -t {{ app_image }} -f {{ source_root }}/Dockerfile {{ source_root }}
-
-- name: Deploy NVR1Service stack from the manager
-  hosts: swarm_managers[0]
-  become: true
-  vars:
-    deploy_root: /opt/nvr1service-swarm
-    stack_name: nvr1
-    rabbitmq_host: rabbitmq.local
-    rabbitmq_port: 5672
-    app_image: nvr1service:demo
-    stack_replicas: "{{ groups['swarm_nodes'] | length }}"
-  tasks:
     - name: Copy stack file to manager
       ansible.builtin.copy:
         src: stack/docker-stack.yml
         dest: "{{ deploy_root }}/docker-stack.yml"
         mode: '0644'
 
-    - name: Deploy NVR1Service stack
+    - name: Deploy hello-service stack
       ansible.builtin.command:
         cmd: docker stack deploy -c {{ deploy_root }}/docker-stack.yml {{ stack_name }}
       environment:
         APP_IMAGE: "{{ app_image }}"
-        RABBITMQ_HOST: "{{ rabbitmq_host }}"
-        RABBITMQ_PORT: "{{ rabbitmq_port | string }}"
         STACK_REPLICAS: "{{ stack_replicas | string }}"

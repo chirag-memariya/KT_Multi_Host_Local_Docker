@@ -2,13 +2,17 @@
 - name: Deploy NVR1Service locally on Linux hosts
   hosts: nvr1service_nodes
   become: true
+  become_method: sudo
+  vars_prompt:
+    - name: ansible_become_password
+      prompt: Enter sudo password for local Linux host
+      private: true
   vars:
     app_name: nvr1service
     app_root: /opt/nvr1service
-    app_source_dir: /opt/nvr1service/src
     app_publish_dir: /opt/nvr1service/current
     service_user: nvr1service
-    source_dir: "{{ playbook_dir }}/../Demo/NVR1Service"
+    source_dir: "{{ playbook_dir }}/../NVR1Service-publish"
     rabbitmq_host: rabbitmq.local
     rabbitmq_port: 5672
 
@@ -19,30 +23,10 @@
         state: restarted
 
   tasks:
-    - name: Install Linux packages required for .NET repository setup
-      ansible.builtin.apt:
-        name:
-          - wget
-          - gpg
-          - apt-transport-https
-        state: present
-        update_cache: true
-
-    - name: Download Microsoft package repository definition
-      ansible.builtin.get_url:
-        url: https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
-        dest: /tmp/packages-microsoft-prod.deb
-        mode: '0644'
-
-    - name: Register Microsoft package repository
-      ansible.builtin.apt:
-        deb: /tmp/packages-microsoft-prod.deb
-
-    - name: Install .NET 8 SDK
-      ansible.builtin.apt:
-        name: dotnet-sdk-8.0
-        state: present
-        update_cache: true
+    - name: Check dotnet is installed locally
+      ansible.builtin.command: dotnet --info
+      register: dotnet_info
+      changed_when: false
 
     - name: Ensure service user exists
       ansible.builtin.user:
@@ -60,21 +44,15 @@
         mode: '0755'
       loop:
         - "{{ app_root }}"
-        - "{{ app_source_dir }}"
         - "{{ app_publish_dir }}"
 
-    - name: Copy NVR1Service source to Linux hosts
+    - name: Copy pre-published NVR1Service to target host
       ansible.builtin.copy:
         src: "{{ source_dir }}/"
-        dest: "{{ app_source_dir }}/"
+        dest: "{{ app_publish_dir }}/"
         owner: "{{ service_user }}"
         group: "{{ service_user }}"
         mode: preserve
-      notify: Restart nvr1service
-
-    - name: Publish NVR1Service
-      ansible.builtin.command:
-        cmd: dotnet publish {{ app_source_dir }}/NVR1Service.csproj -c Release -o {{ app_publish_dir }}
       notify: Restart nvr1service
 
     - name: Install systemd unit for NVR1Service
